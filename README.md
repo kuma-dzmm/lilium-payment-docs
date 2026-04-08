@@ -21,9 +21,10 @@ Lilium 支付与清算相关的公开文档仓库。
 
 ## 当前对外入口
 
-Lilium 对外支付与清算接入域名：
+Lilium 对外入口分为两类：
 
-- `https://pay.lilium.kuma.homes`
+- API 域名：`https://api.lilium.kuma.homes`
+- 登录与 Checkout 域名：`https://lilium.kuma.homes`
 
 预期对外能力包括：
 
@@ -52,4 +53,3 @@ Lilium 对外支付与清算接入域名：
 - 以公开契约为边界，不泄露内部实现细节
 - 优先维护 OpenAPI 与接入规范的一致性
 - 将流程图、状态机、错误模型写清楚
-

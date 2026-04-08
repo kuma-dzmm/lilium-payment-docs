@@ -60,26 +60,27 @@ Lilium v1 采用以下协议组合：
 
 ### 4.1 对外接入域名
 
-Lilium v1 对外统一使用以下接入域名：
+Lilium v1 对外使用两个域名：
 
-- `https://pay.lilium.kuma.homes`
+- API 域名：`https://api.lilium.kuma.homes`
+- 登录与 Checkout 域名：`https://lilium.kuma.homes`
 
 建议的对外路径规划：
 
-- `https://pay.lilium.kuma.homes/oauth/authorize`
-- `https://pay.lilium.kuma.homes/oauth/token`
-- `https://pay.lilium.kuma.homes/.well-known/openid-configuration`
-- `https://pay.lilium.kuma.homes/.well-known/jwks.json`
-- `https://pay.lilium.kuma.homes/v1/payment-intents`
-- `https://pay.lilium.kuma.homes/v1/clearing-instructions`
-- `https://pay.lilium.kuma.homes/checkout/{checkout_token}`
-- `https://pay.lilium.kuma.homes/openapi.json`
+- `https://lilium.kuma.homes/oauth/authorize`
+- `https://api.lilium.kuma.homes/oauth/token`
+- `https://lilium.kuma.homes/.well-known/openid-configuration`
+- `https://lilium.kuma.homes/.well-known/jwks.json`
+- `https://api.lilium.kuma.homes/v1/payment-intents`
+- `https://api.lilium.kuma.homes/v1/clearing-instructions`
+- `https://lilium.kuma.homes/checkout/{checkout_token}`
+- `https://api.lilium.kuma.homes/openapi.json`
 
 这样设计的好处：
 
-- 第三方只需要维护一个稳定的接入域名
-- 用户能清晰识别所有支付确认都发生在 Lilium 官方页面
-- 登录、支付、查询和 OpenAPI 文档都在统一入口下
+- 第三方可以把服务端 API 与浏览器跳转入口分开配置
+- 用户能清晰识别所有登录和支付确认都发生在 Lilium 官方页面
+- API、登录和 Checkout 的安全策略可以独立控制
 
 ## 5. 角色与职责
 
@@ -462,7 +463,7 @@ Checkout-->>Partner: 跳回 return_url
 {
   "intent_id": "pi_001",
   "status": "pending_user_confirmation",
-  "checkout_url": "https://pay.lilium.kuma.homes/checkout/ck_abc123",
+  "checkout_url": "https://lilium.kuma.homes/checkout/ck_abc123",
   "expires_at": "2026-04-09T12:00:00Z"
 }
 ```
