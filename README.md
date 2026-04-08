@@ -30,7 +30,7 @@ Lilium 对外入口分为两类：
 预期对外能力包括：
 
 - `OIDC` 登录
-- `OAuth 2.0 client_credentials` 服务端鉴权
+- `client_id + HMAC(client_secret)` 清算 API 鉴权
 - Hosted Checkout
 - OpenAPI 定义
 - 批量清算 API
