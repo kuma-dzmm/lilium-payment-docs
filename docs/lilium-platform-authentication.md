@@ -66,7 +66,7 @@ Lilium 使用统一域名：
 - 第三方应在自己的服务端完成授权码交换与 refresh token 存储
 - 不支持仅浏览器侧持有长期 refresh token 的 public client 模式
 
-第三方应将 ID Token 中的 `sub` 视为 Lilium `user_id`。`sub` 的格式是 UUID 字符串。
+第三方应将 ID Token 中的 `sub` 视为 Lilium `user_id`。`user_id` 类型为 `string`，最大长度 `255`；调用方不得假设固定格式。
 
 OIDC scope：
 
@@ -166,12 +166,14 @@ POST /oauth/token HTTP/1.1
 Host: lilium.kuma.homes
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=client_credentials&client_id=<client_id>&client_secret=<client_secret>&effective_account_id=<subaccount_user_id>
+grant_type=client_credentials&client_id=<client_id>&client_secret=<client_secret>&effective_account_id=sub_0123456789abcdef0123
 ```
 
 `effective_account_id` 说明：
 
 - 可选参数
+- 类型同 `user_id`
+- 值等于目标账户的 `user_id`
 - 不传时，machine token 绑定主账户
 - 传入时，machine token 绑定该主账户名下的某个子账户
 - 签发时完成归属校验，目标账户必须属于该主账户且状态允许绑定
@@ -187,6 +189,8 @@ grant_type=client_credentials&client_id=<client_id>&client_secret=<client_secret
   "expires_in": 900
 }
 ```
+
+所有 `*_user_id` claims 与 `sub` 均沿用同一 `user_id` 规则：类型为 `string`，最大长度 `255`，调用方不得假设固定格式。
 
 access token 中至少包含：
 
@@ -351,3 +355,4 @@ Authorization: Bearer eyJhbG...
 - `2026-04-09`: 初始平台认证与路由规范成稿。
 - `2026-04-09`: 将平台级认证能力从清算文档中拆出，作为共享前置能力文档。
 - `2026-04-12`: v1.1 — 新增 `effective_account_id` 参数与子账户绑定语义；新增 `principal_id`、`owner_user_id`、`effective_account_user_id` JWT claims；新增 `wallet:read`、`wallet:transfer` scope；refresh token 继承 effective account。
+- `2026-04-12`: 统一 `user_id` 契约：`sub`、`owner_user_id`、`effective_account_user_id` 与 `effective_account_id` 均沿用同一 `user_id` 规则（`string`，最大长度 `255`，不假设固定格式）。
