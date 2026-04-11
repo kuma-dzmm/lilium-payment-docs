@@ -10,13 +10,15 @@ Lilium 面向第三方开发者的公开接口与接入文档仓库。
 
 - 平台级认证与授权说明
 - 清算 API 接入规范
+- 钱包 API 接入规范
 - Hosted Checkout 与 Webhook 说明
 - OpenAPI 及其他公开契约材料
 
 当前文档：
 
-- [Lilium 平台认证与路由规范 v1](./docs/lilium-platform-authentication.md)
-- [Lilium 开放清算 API 接入规范 v1](./docs/lilium-open-clearing-api-design.md)
+- [Lilium 平台认证与路由规范 v1.1](./docs/lilium-platform-authentication.md)
+- [Lilium 开放清算 API 接入规范 v1.1](./docs/lilium-open-clearing-api-design.md)
+- [Lilium 钱包 API 接入规范 v1](./docs/lilium-wallet-api-design.md)
 
 文档边界：
 

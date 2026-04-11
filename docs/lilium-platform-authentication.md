@@ -1,4 +1,4 @@
-# Lilium 平台认证与路由规范 v1
+# Lilium 平台认证与路由规范 v1.1
 
 适用对象：接入 Lilium 平台能力的第三方开发者  
 文档状态：草案
@@ -9,9 +9,11 @@
 - [2. 统一域名与平台入口](#routing)
 - [3. 用户认证（OIDC）](#oidc)
 - [4. 服务端认证（OAuth2 client_credentials）](#machine-auth)
-- [5. API 请求认证](#api-auth)
-- [6. Token 安全要求](#token-security)
-- [7. 平台安全边界](#security)
+- [5. Machine Token 账户绑定](#effective-account)
+- [6. API 请求认证](#api-auth)
+- [7. 公开 scope](#scopes)
+- [8. Token 安全要求](#token-security)
+- [9. 平台安全边界](#security)
 
 <a id="overview"></a>
 ## 1. 文档说明
@@ -157,6 +159,24 @@ Content-Type: application/x-www-form-urlencoded
 grant_type=client_credentials&client_id=<client_id>&client_secret=<client_secret>
 ```
 
+绑定子账户获取 token：
+
+```http
+POST /oauth/token HTTP/1.1
+Host: lilium.kuma.homes
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=<client_id>&client_secret=<client_secret>&effective_account_id=<subaccount_user_id>
+```
+
+`effective_account_id` 说明：
+
+- 可选参数
+- 不传时，machine token 绑定主账户
+- 传入时，machine token 绑定该主账户名下的某个子账户
+- 签发时完成归属校验，目标账户必须属于该主账户且状态允许绑定
+- token 生命周期内不可在业务请求中切换账户
+
 响应示例：
 
 ```json
@@ -171,13 +191,19 @@ grant_type=client_credentials&client_id=<client_id>&client_secret=<client_secret
 access token 中至少包含：
 
 - `sub`
-  调用方对应的 Lilium `user_id`
+  调用方对应的 Lilium `user_id`（主账户）
 - `client_id`
   签发此 token 的凭证标识
 - `scope`
   授权范围
 - `exp`
   过期时间
+- `principal_id`
+  issued principal 唯一标识，用于审计回溯
+- `owner_user_id`
+  主账户 `user_id`，等于 `sub`
+- `effective_account_user_id`
+  token 实际绑定的操作账户；未传 `effective_account_id` 时等于 `sub`，传入子账户时等于该子账户 `user_id`
 
 默认有效期：
 
@@ -209,12 +235,43 @@ grant_type=refresh_token&client_id=<client_id>&client_secret=<client_secret>&ref
 
 - 此处的 refresh token 仅适用于第三方服务端凭证，不适用于 OIDC 用户登录返回的 refresh token
 - 每次成功刷新都会返回新的 refresh token，并使旧 refresh token 失效
+- refresh token 继承原 principal 的 `effective_account_user_id`，不接受新的 `effective_account_id`
 - 如果 refresh token 过期、被吊销或已被轮换，第三方必须重新执行 `client_credentials` 获取新的 token 对
+- 想访问另一个账户，重新发起一次 `client_credentials` 并传入对应的 `effective_account_id`
 - machine refresh 请求必须携带 `client_id + client_secret`
 - 服务端会根据 refresh token 所属类型决定刷新逻辑；OIDC refresh token 与 machine refresh token 不能交叉使用
 
+<a id="effective-account"></a>
+## 5. Machine Token 账户绑定
+
+Machine token 是"单账户能力 token"：
+
+- `owner_user_id` 表示该 token 所属主账户
+- `effective_account_user_id` 表示该 token 可以实际操作的账户
+- 一张 token 只能代表一个 `effective_account_user_id`
+
+这意味着：
+
+- 绑定主账户的 token，只能操作主账户自己的数据
+- 绑定子账户的 token，只能操作该子账户的数据
+- 想操作另一个账户，必须重新申请绑定该账户的 token
+
+重要语义：
+
+- machine token 的 `sub` 继续保持主账户 `owner_user_id`，用于兼容已有依赖 `sub` 的代码
+- **不允许把 `sub` 当作最终操作账户**，必须统一使用 `effective_account_user_id`
+- 所有 API 授权判断一律使用 `effective_account_user_id` 作为账户边界
+
+同时持有多组 token：
+
+- 主账户 token
+- 子账户 A token
+- 子账户 B token
+
+彼此独立刷新，互不影响。
+
 <a id="api-auth"></a>
-## 5. API 请求认证
+## 6. API 请求认证
 
 所有 API 请求都必须携带以下请求头：
 
@@ -247,21 +304,26 @@ Host: lilium.kuma.homes
 Authorization: Bearer eyJhbG...
 ```
 
-## 5.1 当前公开 scope
+## 7. 公开 scope
 
 当前公开文档定义的 scope 如下：
 
 - `clearing:basic`
   访问清算相关公开 API：`/api/v1/payment-intents`、`/api/v1/clearing-instructions`、`/api/v1/clearing-batches`
+- `wallet:read`
+  访问钱包只读 API：`/api/wallet/balance`、`/api/wallet/stats`、`/api/wallet/transactions`、`/api/wallet/wealth_leaderboard`
+- `wallet:transfer`
+  访问钱包转账 API：`/api/wallet/transfer`
 
 规则：
 
 - access token 的 `scope` claim 由凭证配置决定
 - v1 不支持在 token 请求中动态下调或上调 scope；服务端直接按该凭证配置签发
 - 如果 token 缺少调用某个 API 所需的 scope，服务端返回 `INVALID_SCOPE`
+- `wallet:transfer` 与 `wallet:read` 独立授权，不互相包含
 
 <a id="token-security"></a>
-## 6. Token 安全要求
+## 8. Token 安全要求
 
 - access token 应保持短有效期；v1 默认 `15` 分钟
 - refresh token 应仅存放在服务端安全存储中，不应暴露到浏览器
@@ -271,7 +333,7 @@ Authorization: Bearer eyJhbG...
 - Lilium 保留在检测到异常时吊销 token 的权利
 
 <a id="security"></a>
-## 7. 平台安全边界
+## 9. 平台安全边界
 
 第三方必须满足以下要求：
 
@@ -288,3 +350,4 @@ Authorization: Bearer eyJhbG...
 
 - `2026-04-09`: 初始平台认证与路由规范成稿。
 - `2026-04-09`: 将平台级认证能力从清算文档中拆出，作为共享前置能力文档。
+- `2026-04-12`: v1.1 — 新增 `effective_account_id` 参数与子账户绑定语义；新增 `principal_id`、`owner_user_id`、`effective_account_user_id` JWT claims；新增 `wallet:read`、`wallet:transfer` scope；refresh token 继承 effective account。
