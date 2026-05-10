@@ -195,19 +195,19 @@ Lilium 使用 RFC 9421 HTTP Message Signatures 对请求签名。
 
 `shared_secret` 只用于 HMAC，不得写入响应、日志或错误消息。
 
-### 5.1 响应签名
+### 5.1 响应不要求签名
 
-JSON 响应可以使用同一套 RFC 9421 机制签名：
+v1 只要求第三方校验 Lilium 发出的请求签名。第三方响应不要求使用 RFC 9421
+签名，也不要求提供 `Content-Digest`。
 
-```http
-Content-Type: application/json
-Content-Digest: sha-256=:BASE64_BODY_SHA256:
-Signature-Input: lilium=("@status" "content-type" "content-digest");created=1778395201;expires=1778395231;keyid="demo";alg="hmac-sha256"
-Signature: lilium=:BASE64_HMAC_SIGNATURE:
-```
+响应侧的协议校验依赖：
 
-SSE 是流式响应，v1 不要求第三方为整段 SSE body 预先计算 `Content-Digest`。
-SSE 场景下，第三方仍必须使用 HTTPS，Lilium 通过请求签名、响应 `Content-Type`、事件 schema、`sequence` 与 `effect_id` 做协议校验。
+- HTTPS 传输
+- HTTP status
+- 响应 `Content-Type`
+- JSON / SSE schema
+- `api_version`
+- `sequence` 与 `effect_id`
 
 <a id="invoke-envelope"></a>
 ## 6. 调用信封
@@ -516,7 +516,6 @@ SSE 规则：
 - JSON / SSE schema 不合法
 - `api_version` 不支持
 - effect schema 不合法
-- 响应签名不合法（当该命令要求响应签名时）
 
 集成错误不会把第三方原始响应直接展示给用户。Lilium 会返回通用失败提示，并记录排障信息。
 
