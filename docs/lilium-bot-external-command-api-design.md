@@ -207,7 +207,7 @@ v1 只要求第三方校验 Lilium 发出的请求签名。第三方响应不要
 - 响应 `Content-Type`
 - JSON / SSE schema
 - `api_version`
-- `sequence` 与 `effect_id`
+- effect 顺序与 payload 校验
 
 <a id="invoke-envelope"></a>
 ## 6. 调用信封
@@ -318,19 +318,15 @@ HTTP 非 `2xx` 响应会被 Lilium 视为集成错误。Lilium 不会把非 `2xx
   "status": "ok",
   "effects": [
     {
-      "effect_id": "eff_1",
-      "sequence": 1,
-      "effect": {
-        "type": "reply",
-        "text": "处理完成",
-        "markdown": true
-      }
+      "type": "reply",
+      "text": "处理完成",
+      "markdown": true
     }
   ]
 }
 ```
 
-业务拒绝响应：
+业务拒绝响应可以保持很短，用户可见文案放在 effect 中：
 
 ```json
 {
@@ -338,20 +334,11 @@ HTTP 非 `2xx` 响应会被 Lilium 视为集成错误。Lilium 不会把非 `2xx
   "type": "command.result",
   "invocation_id": "cmd_01H...",
   "status": "rejected",
-  "error": {
-    "code": "INVALID_ARGS",
-    "message": "missing required argument",
-    "user_message": "参数不完整"
-  },
   "effects": [
     {
-      "effect_id": "eff_rejected",
-      "sequence": 1,
-      "effect": {
-        "type": "reply",
-        "text": "参数不完整",
-        "markdown": true
-      }
+      "type": "reply",
+      "text": "参数不完整",
+      "markdown": true
     }
   ]
 }
@@ -365,10 +352,9 @@ HTTP 非 `2xx` 响应会被 Lilium 视为集成错误。Lilium 不会把非 `2xx
 规则：
 
 - 第三方业务拒绝必须返回 HTTP `2xx` + `status: "rejected"`。
-- `error.code` 是稳定业务错误码。
-- `error.message` 用于日志和排障。
-- `error.user_message` 可以面向用户展示。
-- 如果返回 `effects`，Lilium 优先执行合法 `effects`。
+- 业务拒绝的用户可见文案应通过 `effects` 返回。
+- `error` 是可选诊断字段，不应承载额外的用户展示文案。
+- 如果不返回 `effects`，Lilium 可以只记录拒绝结果，不保证向聊天室发送第三方提供的错误文本。
 
 <a id="sse-response"></a>
 ## 9. SSE 响应
@@ -386,12 +372,10 @@ Cache-Control: no-cache
 
 ```text
 event: effect
-id: eff_1
-data: {"effect_id":"eff_1","sequence":1,"effect":{"type":"reply","text":"第一条","markdown":true}}
+data: {"type":"reply","text":"第一条","markdown":true}
 
 event: effect
-id: eff_2
-data: {"effect_id":"eff_2","sequence":2,"effect":{"type":"reply","text":"第二条","markdown":true}}
+data: {"type":"reply","text":"第二条","markdown":true}
 
 event: done
 data: {"status":"ok"}
@@ -399,10 +383,8 @@ data: {"status":"ok"}
 
 SSE 规则：
 
-- `effect` event 的 `data` 必须是合法 effect item JSON。
-- `id` 应与 `data.effect_id` 一致。
-- `sequence` 从 `1` 开始递增。
-- Lilium 按 `sequence` 顺序执行 effects。
+- `effect` event 的 `data` 必须是合法 effect JSON。
+- Lilium 按 SSE event 到达顺序执行 effects。
 - `done` event 表示命令结束。
 - `done.data.status` 取值为 `ok` 或 `rejected`。
 - 流在 `done` 前断开时，Lilium 将本次调用标记为集成错误。
@@ -411,27 +393,26 @@ SSE 规则：
 <a id="effects"></a>
 ## 10. Effect 数据结构
 
-每个 effect item：
+JSON 响应的 `effects` 数组直接包含 effect payload。SSE 响应的 `effect`
+event `data` 也直接包含 effect payload。
+
+示例：
 
 ```json
 {
-  "effect_id": "eff_1",
-  "sequence": 1,
-  "effect": {
-    "type": "reply",
-    "text": "处理完成",
-    "markdown": true
-  }
+  "type": "reply",
+  "text": "处理完成",
+  "markdown": true
 }
 ```
 
-字段说明：
+执行顺序：
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| `effect_id` | 是 | 第三方生成的 effect 唯一标识，建议在一次 invocation 内唯一 |
-| `sequence` | 是 | 执行顺序，从 `1` 开始递增 |
-| `effect` | 是 | 具体 effect payload |
+- JSON 响应按 `effects` 数组顺序执行。
+- SSE 响应按 `effect` event 到达顺序执行。
+- Stateless HTTP v1 不要求第三方提供 `effect_id` 或 `sequence`。
+- Stateful WebSocket 后续会在 effect frame 外层增加 `sequence` / `effect_id`，
+  用于 ack、resume 和去重；这不属于当前无状态 HTTP 响应格式。
 
 ### 10.1 `reply`
 
@@ -550,8 +531,7 @@ v1 默认不要求 Lilium 自动重试命令调用。
 
 SSE 场景下，第三方应保证同一次 invocation 内：
 
-- `effect_id` 稳定
-- `sequence` 稳定
+- 返回的 effect 序列稳定
 - 断线后的重复处理不会产生不同业务结果
 
 <a id="security"></a>
@@ -613,6 +593,5 @@ HTTP Callback 不是当前开放能力。
 - endpoint 根据业务结果返回 `application/json` 或 `text/event-stream`。
 - 业务拒绝使用 `status: "rejected"`，不使用 HTTP `400` 表示用户参数错误。
 - 返回的 effect 类型属于本文档定义范围。
-- `effect_id` 与 `sequence` 稳定且可用于排障。
 - endpoint 超时、重复请求和业务副作用都有幂等保护。
 - 生产环境使用 HTTPS，并妥善保护 `shared_secret`。
